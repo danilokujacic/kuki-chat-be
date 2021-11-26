@@ -2,6 +2,7 @@ const { Server } = require('socket.io');
 const { createServer } = require('http');
 const express = require('express');
 const cors = require('cors');
+const ChatModel = require('./models/chat/chat');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const config = require('./config')[process.env.NODE_ENV || 'development'];
@@ -19,6 +20,7 @@ app.use(
 app.use(bodyParser.json());
 
 controllers.forEach((controller) => {
+    console.log(controller);
     app.use(controller.path, controller.router);
 });
 
@@ -46,22 +48,37 @@ io.use((socket, next) => {
 io.on('connection_error', (err) => {
     console.error('Error message:', err.message);
 });
-const chats = [];
 const users = [];
-
-const formatDate = (date) => {
-    return `${date.getHours()} : ${date.getMinutes()}`;
-};
 
 io.on('connection', (socket) => {
     console.log('Initialised socket connection: ', socket.id);
+
     for (let [id, socket] of io.of('/').sockets) {
         users.push({ id, username: socket.username });
     }
-    socket.on('send-message', (data) => {
-        data.chatDate = formatDate(new Date(data.date));
-        chats.push(data);
-        io.sockets.emit('receive_message', chats);
+    socket.broadcast.emit('user-joined', socket.username);
+    socket.on('disconnect', () => {
+        socket.broadcast.emit('user-left', socket.username);
+    });
+    socket.on('seen-message', async (data) => {
+        const seenData = {
+            picture: data.picture,
+            username: data.username,
+            date: data.date,
+        };
+        data.chats[data.chats.length - 1] = {
+            ...data.chats[data.chats.length - 1],
+            seen: [seenData, ...data.chats[data.chats.length - 1].seen],
+        };
+        await ChatModel.updateOne({ id: 0 }, { chats: data.chats });
+        io.sockets.emit('receive_seen', data.chats);
+    });
+    socket.on('send-message', async (data) => {
+        const chat = await ChatModel.findOne({ id: 0 });
+        data.chatDate = data.date;
+        chat.chats.push(data);
+        await ChatModel.updateOne({ id: 0 }, { chats: chat.chats });
+        io.sockets.emit('receive_message', chat.chats);
     });
 });
 httpServer.listen(process.env.PORT || 9000, () => {

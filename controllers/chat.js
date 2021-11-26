@@ -20,7 +20,13 @@ chatRouter.post('/:id?', async (req, res) => {
                 { chats },
             );
             if (!chat) {
-                return res.json({ error: true, message: 'Chat doesnt excist' });
+                const chat = new ChatModel({
+                    id: Number(id),
+                    chats,
+                    users,
+                });
+                await chat.save();
+                return res.json(chat);
             }
             return res.json(chat);
         }

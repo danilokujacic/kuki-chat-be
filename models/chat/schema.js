@@ -7,6 +7,7 @@ const MessageSchema = new mongoose.Schema({
     message: String,
     date: String,
     chatDate: String,
+    seen: Array,
 });
 const ChatSchema = new mongoose.Schema({
     id: Number,
